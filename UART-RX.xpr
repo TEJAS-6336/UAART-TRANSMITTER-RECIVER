@@ -1,93 +1,72 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- Product Version: Vivado v2014.4 (64-bit)              -->
-<!--                                                         -->
-<!-- Copyright 1986-2014 Xilinx, Inc. All Rights Reserved.   -->
+`timescale 1ns / 1ps
 
-<Project Version="7" Minor="2" Path="C:/Users/Tejas/OneDrive/Desktop/TEJAS/3rd SEM/PROJECTS/UART-RX/UART-RX.xpr">
-  <DefaultLaunch Dir="$PRUNDIR"/>
-  <Configuration>
-    <Option Name="Id" Val="27abf1ccb4cc40468506f3bb22a7caa6"/>
-    <Option Name="Part" Val="xc7vx485tffg1157-1"/>
-    <Option Name="CompiledLibDir" Val="$PCACHEDIR/compile_simlib"/>
-    <Option Name="BoardPart" Val=""/>
-    <Option Name="ActiveSimSet" Val="sim_1"/>
-    <Option Name="DefaultLib" Val="xil_defaultlib"/>
-  </Configuration>
-  <FileSets Version="1" Minor="31">
-    <FileSet Name="sources_1" Type="DesignSrcs" RelSrcDir="$PSRCDIR/sources_1">
-      <Filter Type="Srcs"/>
-      <File Path="$PSRCDIR/sources_1/new/uart_rx.v">
-        <FileInfo>
-          <Attr Name="ImportPath" Val="$PPRDIR/../../../../../../project_40/project_40.srcs/sources_1/new/uart_rx.v"/>
-          <Attr Name="ImportTime" Val="1754061796"/>
-          <Attr Name="UsedIn" Val="synthesis"/>
-          <Attr Name="UsedIn" Val="implementation"/>
-          <Attr Name="UsedIn" Val="simulation"/>
-        </FileInfo>
-      </File>
-      <Config>
-        <Option Name="DesignMode" Val="RTL"/>
-        <Option Name="TopModule" Val="uart_rx_tb"/>
-        <Option Name="TopAutoSet" Val="TRUE"/>
-      </Config>
-    </FileSet>
-    <FileSet Name="constrs_1" Type="Constrs" RelSrcDir="$PSRCDIR/constrs_1">
-      <Filter Type="Constrs"/>
-      <Config>
-        <Option Name="ConstrsType" Val="XDC"/>
-      </Config>
-    </FileSet>
-    <FileSet Name="sim_1" Type="SimulationSrcs" RelSrcDir="$PSRCDIR/sim_1">
-      <Config>
-        <Option Name="DesignMode" Val="RTL"/>
-        <Option Name="TopModule" Val="uart_rx_tb"/>
-        <Option Name="TopLib" Val="xil_defaultlib"/>
-        <Option Name="TopAutoSet" Val="TRUE"/>
-        <Option Name="SrcSet" Val="sources_1"/>
-      </Config>
-    </FileSet>
-  </FileSets>
-  <Simulators>
-    <Simulator Name="XSim">
-      <Option Name="Description" Val="Vivado Simulator"/>
-      <Option Name="CompiledLib" Val="0"/>
-    </Simulator>
-    <Simulator Name="ModelSim">
-      <Option Name="Description" Val="QuestaSim/ModelSim Simulator"/>
-    </Simulator>
-    <Simulator Name="IES">
-      <Option Name="Description" Val="Incisive Enterprise Simulator (IES)"/>
-    </Simulator>
-    <Simulator Name="VCS">
-      <Option Name="Description" Val="Verilog Compiler Simulator (VCS)"/>
-    </Simulator>
-  </Simulators>
-  <Runs Version="1" Minor="9">
-    <Run Id="synth_1" Type="Ft3:Synth" SrcSet="sources_1" Part="xc7vx485tffg1157-1" ConstrsSet="constrs_1" Description="Vivado Synthesis Defaults" State="current" Dir="$PPRDIR/../../../../../../project_40/project_40.runs/synth_1">
-      <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Synthesis Defaults" Flow="Vivado Synthesis 2014">
-          <Desc>Vivado Synthesis Defaults</Desc>
-        </StratHandle>
-        <Step Id="synth_design"/>
-      </Strategy>
-      <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
-    </Run>
-    <Run Id="impl_1" Type="Ft2:EntireDesign" Part="xc7vx485tffg1157-1" ConstrsSet="constrs_1" Description="Vivado Implementation Defaults" State="current" Dir="$PPRDIR/../../../../../../project_40/project_40.runs/impl_1" SynthRun="synth_1">
-      <Strategy Version="1" Minor="2">
-        <StratHandle Name="Vivado Implementation Defaults" Flow="Vivado Implementation 2014">
-          <Desc>Vivado Implementation Defaults</Desc>
-        </StratHandle>
-        <Step Id="init_design"/>
-        <Step Id="opt_design"/>
-        <Step Id="power_opt_design"/>
-        <Step Id="place_design"/>
-        <Step Id="post_place_power_opt_design"/>
-        <Step Id="phys_opt_design"/>
-        <Step Id="route_design"/>
-        <Step Id="post_route_phys_opt_design"/>
-        <Step Id="write_bitstream"/>
-      </Strategy>
-      <GeneratedRun Dir="$PRUNDIR" File="gen_run.xml"/>
-    </Run>
-  </Runs>
-</Project>
+module uart_rx (
+    input clk,
+    input reset,
+    input rx,
+    output reg [7:0] data_out,
+    output reg rx_done
+);
+    reg [3:0] state;
+    reg [2:0] bit_index;
+    reg [7:0] shift_reg;
+
+    parameter IDLE=0, START=1, DATA=2, STOP=3, DONE=4;
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            state <= IDLE;
+            data_out <= 8'd0;
+            rx_done <= 0;
+            bit_index <= 0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    rx_done <= 0;
+                    if (rx == 0) state <= START; // Start bit detected
+                end
+                START: state <= DATA;
+                DATA: begin
+                    shift_reg[bit_index] <= rx;
+                    if (bit_index == 7)
+                        state <= STOP;
+                    else
+                        bit_index <= bit_index + 1;
+                end
+                STOP: begin
+                    state <= DONE;
+                end
+                DONE: begin
+                    data_out <= shift_reg;
+                    rx_done <= 1;
+                    state <= IDLE;
+                end
+            endcase
+        end
+    end
+endmodule
+module uart_rx_tb;
+ reg clk,reset;
+ reg rx;
+ wire [7:0] data_out;
+ wire rx_done;
+ 
+ uart m1(clk,reset,rx,data_out,rx_done);
+
+ always#10 clk=~clk;
+ 
+ initial
+ begin
+ clk=0;
+ reset=1'b1;
+ rx=8;
+ 
+ #20 rx=1;
+ #20 rx=0;
+ #20 rx=1;
+    
+     // End simulation
+     #20 $finish;
+ end
+ 
+ endmodule
